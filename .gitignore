@@ -1,1 +1,3 @@
 /.idea/
+/src/type-detector/node_modules/
+/src/type-detector/build/
