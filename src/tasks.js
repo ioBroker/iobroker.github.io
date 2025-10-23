@@ -24,7 +24,7 @@ async function copyDir(src, dest) {
 }
 
 (async () => {
-    const src = path.resolve(__dirname, 'type-detector/build'); // `./build`
+    const src = path.resolve(__dirname, 'type-detector', 'build'); // `./build`
     const dest = path.resolve(__dirname, '..', 'type-detector'); // `../../type-detector`
 
     try {
