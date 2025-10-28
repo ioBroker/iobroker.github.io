@@ -18,7 +18,7 @@
     },
     "scripts": {
         "start": "vite",
-        "build": "vite build",
+        "build": "vite build && node ../tasks.js",
         "lint": "eslint --fix --ext .js,.jsx src",
         "i18n=>flat": "node tasks --i18n=>flat",
         "flat=>i18n": "node tasks --flat=>i18n"
