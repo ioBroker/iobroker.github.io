@@ -18,9 +18,10 @@ import {
     FormControlLabel,
     Checkbox,
 } from '@mui/material';
-import { type DetectOptions, type PatternControl, Types } from '@iobroker/type-detector';
-import ChannelDetector from '@iobroker/type-detector';
 import { Brightness1 } from '@mui/icons-material';
+
+import ChannelDetector, { type DetectOptions, type PatternControl, Types } from '@iobroker/type-detector';
+import { FileDrop } from './components/FileDrop';
 
 interface AppState {
     json: string;
@@ -87,8 +88,40 @@ export default class App extends Component<object, AppState> {
             detectAllPossibleDevices: true,
         };
 
+        const json =
+            window.localStorage.getItem('json') ||
+            `{
+    "shelly.0.SHDM-2#081234567896#1.lights.brightness": {
+        "type": "state",
+        "common": {
+          "name": "Brightness",
+          "type": "number",
+          "role": "level.brightness",
+          "read": true,
+          "write": true,
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "smartName": false
+        },
+        "native": {},
+        "_id": "shelly.0.SHDM-2#081234567896#1.lights.brightness",
+        "acl": {
+          "object": 1636,
+          "state": 1636,
+          "owner": "system.user.admin",
+          "ownerGroup": "system.group.administrator"
+        },
+        "from": "system.adapter.admin.0",
+        "user": "system.user.admin",
+        "ts": 1761135418194,
+        "val": 10,
+        "ack": true
+      }
+  }`;
+
         this.state = {
-            json: window.localStorage.getItem('json') || '',
+            json,
             ids: [],
             selectedId: window.localStorage.getItem('selectedId') || '',
             controls: null,
@@ -133,30 +166,44 @@ export default class App extends Component<object, AppState> {
                 return;
             }
             this.setState({ ids: Object.keys(objects), objects, error: '' }, () => {
-                if (this.state.selectedId && objects[this.state.selectedId]) {
+                if (!this.state.selectedId || objects[this.state.selectedId]) {
                     // If upper Device is not a channel remove detectOnlyChannel flag
                     const options: DetectOptions = JSON.parse(JSON.stringify(this.state.options));
-                    // options.detectOnlyChannel =
-                    //     this.state.objects[getParent(this.state.selectedId)]?.type === 'channel' ||
-                    //     this.state.objects[getParent(this.state.selectedId)]?.type === 'device';
-
-                    try {
-                        const detector = new ChannelDetector();
-
-                        options.objects = objects;
-                        options.id = this.state.selectedId;
-
-                        const controls = detector.detect(options);
-                        if (controls) {
-                            for (const types of controls) {
-                                console.log(`Found ${types.type}`);
+                    const ids = [];
+                    if (!this.state.selectedId) {
+                        // collect all IDs with enums
+                        Object.keys(objects).forEach(id => {
+                            if (objects[id].common?.enums) {
+                                ids.push(id);
                             }
+                        });
+                        if (ids.length === 0) {
+                            ids.push(Object.keys(objects)[0]); // take first
                         }
-                        this.setState({ controls, error: '' });
-                    } catch (e) {
-                        this.setState({ error: e.toString() });
-                        this.setState({ controls: null });
+                    } else {
+                        ids.push(this.state.selectedId);
                     }
+
+                    const allControls = [];
+                    for (const id of ids) {
+                        try {
+                            const detector = new ChannelDetector();
+
+                            options.objects = objects;
+                            options.id = id;
+
+                            const controls = detector.detect(options);
+                            if (controls) {
+                                for (const control of controls) {
+                                    allControls.push(control);
+                                }
+                            }
+                        } catch (e) {
+                            this.setState({ error: e.toString() });
+                            this.setState({ controls: null });
+                        }
+                    }
+                    this.setState({ controls: allControls, error: '' });
                 }
             });
         } catch (e) {
@@ -250,111 +297,117 @@ export default class App extends Component<object, AppState> {
                                 background: this.state.theme.palette.background.default,
                             }}
                         >
-                            <div style={{ display: 'flex' }}>
-                                <TextField
-                                    label="JSON Input"
-                                    multiline
-                                    rows={5}
-                                    variant="standard"
-                                    value={this.state.json}
-                                    onChange={e => {
-                                        window.localStorage.setItem('json', e.target.value);
-                                        this.setState({ json: e.target.value }, () => this.detectControls());
-                                    }}
-                                    style={{ width: '100%', marginTop: 20 }}
-                                />
-                                <div
-                                    style={{
-                                        marginLeft: 20,
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '10px',
-                                        color: this.state.theme.palette.text.primary,
-                                    }}
-                                >
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={this.state.options.detectOnlyChannel}
-                                                onChange={e => {
-                                                    const options = {
-                                                        ...this.state.options,
-                                                        detectOnlyChannel: e.target.checked,
-                                                    };
-                                                    window.localStorage.setItem('options', JSON.stringify(options));
-                                                    this.setState({ options }, () => this.detectControls());
-                                                }}
-                                            />
-                                        }
-                                        label="Detect Only Channel"
+                            <FileDrop
+                                onFiles={json => {
+                                    this.setState({ json }, () => this.detectControls());
+                                }}
+                            >
+                                <div style={{ display: 'flex' }}>
+                                    <TextField
+                                        label="JSON Input"
+                                        multiline
+                                        rows={9}
+                                        variant="standard"
+                                        value={this.state.json}
+                                        onChange={e => {
+                                            window.localStorage.setItem('json', e.target.value);
+                                            this.setState({ json: e.target.value }, () => this.detectControls());
+                                        }}
+                                        style={{ width: '100%', marginTop: 10 }}
                                     />
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={this.state.options.detectAllPossibleDevices}
-                                                onChange={e => {
-                                                    const options = {
-                                                        ...this.state.options,
-                                                        detectAllPossibleDevices: e.target.checked,
-                                                    };
-                                                    window.localStorage.setItem('options', JSON.stringify(options));
-                                                    this.setState({ options }, () => this.detectControls());
-                                                }}
-                                            />
-                                        }
-                                        label="Detect All Possible Devices"
-                                    />
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={this.state.options.detectParent}
-                                                onChange={e => {
-                                                    const options = {
-                                                        ...this.state.options,
-                                                        detectParent: e.target.checked,
-                                                    };
-                                                    window.localStorage.setItem('options', JSON.stringify(options));
-                                                    this.setState({ options }, () => this.detectControls());
-                                                }}
-                                            />
-                                        }
-                                        label="Detect Parent"
-                                    />
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={this.state.options.ignoreEnums}
-                                                onChange={e => {
-                                                    const options = {
-                                                        ...this.state.options,
-                                                        ignoreEnums: e.target.checked,
-                                                    };
-                                                    window.localStorage.setItem('options', JSON.stringify(options));
-                                                    this.setState({ options }, () => this.detectControls());
-                                                }}
-                                            />
-                                        }
-                                        label="Ignore Enums"
-                                    />
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={this.state.options.ignoreCache}
-                                                onChange={e => {
-                                                    const options = {
-                                                        ...this.state.options,
-                                                        ignoreCache: e.target.checked,
-                                                    };
-                                                    window.localStorage.setItem('options', JSON.stringify(options));
-                                                    this.setState({ options }, () => this.detectControls());
-                                                }}
-                                            />
-                                        }
-                                        label="Ignore Cache"
-                                    />
+                                    <div
+                                        style={{
+                                            marginLeft: 20,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '10px',
+                                            color: this.state.theme.palette.text.primary,
+                                        }}
+                                    >
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={this.state.options.detectOnlyChannel}
+                                                    onChange={e => {
+                                                        const options = {
+                                                            ...this.state.options,
+                                                            detectOnlyChannel: e.target.checked,
+                                                        };
+                                                        window.localStorage.setItem('options', JSON.stringify(options));
+                                                        this.setState({ options }, () => this.detectControls());
+                                                    }}
+                                                />
+                                            }
+                                            label="Detect Only Channel"
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={this.state.options.detectAllPossibleDevices}
+                                                    onChange={e => {
+                                                        const options = {
+                                                            ...this.state.options,
+                                                            detectAllPossibleDevices: e.target.checked,
+                                                        };
+                                                        window.localStorage.setItem('options', JSON.stringify(options));
+                                                        this.setState({ options }, () => this.detectControls());
+                                                    }}
+                                                />
+                                            }
+                                            label="Detect All Possible Devices"
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={this.state.options.detectParent}
+                                                    onChange={e => {
+                                                        const options = {
+                                                            ...this.state.options,
+                                                            detectParent: e.target.checked,
+                                                        };
+                                                        window.localStorage.setItem('options', JSON.stringify(options));
+                                                        this.setState({ options }, () => this.detectControls());
+                                                    }}
+                                                />
+                                            }
+                                            label="Detect Parent"
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={this.state.options.ignoreEnums}
+                                                    onChange={e => {
+                                                        const options = {
+                                                            ...this.state.options,
+                                                            ignoreEnums: e.target.checked,
+                                                        };
+                                                        window.localStorage.setItem('options', JSON.stringify(options));
+                                                        this.setState({ options }, () => this.detectControls());
+                                                    }}
+                                                />
+                                            }
+                                            label="Ignore Enums"
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={this.state.options.ignoreCache}
+                                                    onChange={e => {
+                                                        const options = {
+                                                            ...this.state.options,
+                                                            ignoreCache: e.target.checked,
+                                                        };
+                                                        window.localStorage.setItem('options', JSON.stringify(options));
+                                                        this.setState({ options }, () => this.detectControls());
+                                                    }}
+                                                />
+                                            }
+                                            label="Ignore Cache"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            {this.state.ids?.length ? (
+                            </FileDrop>
+                            {this.state.json && this.state.ids?.length ? (
                                 <FormControl
                                     fullWidth
                                     variant="standard"
@@ -370,6 +423,9 @@ export default class App extends Component<object, AppState> {
                                             );
                                         }}
                                     >
+                                        <MenuItem value="">
+                                            <em>Detect all</em>
+                                        </MenuItem>
                                         {this.state.ids.map(id => (
                                             <MenuItem
                                                 key={id}
@@ -382,7 +438,9 @@ export default class App extends Component<object, AppState> {
                                     </Select>
                                 </FormControl>
                             ) : null}
-                            {this.state.error ? <div style={{ color: 'red' }}>{this.state.error}</div> : null}
+                            {this.state.json && this.state.error ? (
+                                <div style={{ color: 'red' }}>{this.state.error}</div>
+                            ) : null}
                             {this.state.controls?.map((control, i) => this.renderControl(control, i))}
                         </div>
                     </div>
